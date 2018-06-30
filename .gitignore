@@ -9,6 +9,8 @@ gconf.glade.h
 *.o.d
 *.lex.c
 *.tab.c
+.tmp_gtkcheck
+.tmp_qtcheck
 
 #
 # configuration programs

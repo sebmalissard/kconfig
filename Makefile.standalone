@@ -11,7 +11,7 @@ depfile=$@.d,-MT,$@
 # Usage:
 #   $(call print, cmd)
 define print
-	$(if $(filter silent_,$(quiet)),, echo $($(quiet)$(strip $(1))))
+	$(if $(filter silent_,$(quiet)),, echo "  $($(quiet)$(strip $(1)))")
 endef
 
 #############################################################################
@@ -45,8 +45,10 @@ endif
 
 ifeq ($(KBUILD_VERBOSE),1)
   quiet =
+  Q =
 else
   quiet=quiet_
+  Q = @
 endif
 
 # If the user is running make -s (silent mode), suppress echoing of
@@ -63,14 +65,18 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 
 HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS)
+HOST_LFS_LIBS := $(shell getconf LFS_LIBS)
 
 HOSTCC       = gcc
+HOSTCXX      = g++
 HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 \
 		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS)
+HOSTCXXFLAGS := -O2 $(HOST_LFS_CFLAGS)
 HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS)
+HOST_LOADLIBES := $(HOST_LFS_LIBS)
 
 LEX		= flex
-YACC	= bison
+YACC		= bison
 
 #############################################################################
 # Get from linux/script/Kbuild.include
@@ -79,6 +85,25 @@ YACC	= bison
 ###
 # filename of target with directory and extension stripped
 basetarget = $(basename $(notdir $@))
+
+###
+# Escape single quote for use in echo statements
+escsq = $(subst ','\'',$1)
+
+###
+# Easy method for doing a status message
+       kecho := :
+ quiet_kecho := echo
+silent_kecho := :
+kecho := $($(quiet)kecho)
+
+# echo command.
+# Short version is used, if $(quiet) equals `quiet_', otherwise full one.
+echo-cmd = $(if $($(quiet)cmd_$(1)),\
+	echo '  $(call escsq,$($(quiet)cmd_$(1)))';)
+
+# printing commands
+cmd = @$(echo-cmd) $(cmd_$(1))
 
 #############################################################################
 # Get from linux/script/Makefile.lib
@@ -124,17 +149,31 @@ host-cmulti	:= $(foreach m,$(__hostprogs),\
 # Object (.o) files compiled from .c files
 host-cobjs	:= $(sort $(foreach m,$(__hostprogs),$($(m)-objs)))
 
+# C++ code
+# C++ executables compiled from at least one .cc file
+# and zero or more .c files
+host-cxxmulti	:= $(foreach m,$(__hostprogs),$(if $($(m)-cxxobjs),$(m)))
+
+# C++ Object (.o) files compiled from .cc files
+host-cxxobjs	:= $(sort $(foreach m,$(host-cxxmulti),$($(m)-cxxobjs)))
+
 host-cmulti	:= $(addprefix $(obj)/,$(host-cmulti))
 host-cobjs	:= $(addprefix $(obj)/,$(host-cobjs))
+host-cxxmulti	:= $(addprefix $(obj)/,$(host-cxxmulti))
+host-cxxobjs	:= $(addprefix $(obj)/,$(host-cxxobjs))
 
 #####
 # Handle options to gcc. Support building with separate output directory
 _hostc_flags   = $(HOSTCFLAGS)   $(HOST_EXTRACFLAGS)   \
                  $(HOSTCFLAGS_$(basetarget).o)
+_hostcxx_flags = $(HOSTCXXFLAGS) $(HOST_EXTRACXXFLAGS) \
+                 $(HOSTCXXFLAGS_$(basetarget).o)
 
 __hostc_flags	= $(_hostc_flags)
+__hostcxx_flags	= $(_hostcxx_flags)
 
 hostc_flags    = -Wp,-MD,$(depfile) $(__hostc_flags)
+hostcxx_flags  = -Wp,-MD,$(depfile) $(__hostcxx_flags)
 
 #####
 # Compile programs on the host
@@ -152,9 +191,30 @@ $(call multi_depend, $(host-cmulti), , -objs)
 
 # Create .o file from a single .c file
 # host-cobjs -> .o
-quiet_cmd_host-cobjs    = HOSTCC  $@
-      cmd_host-cobjs    = $(HOSTCC) $(hostc_flags) -c -o $@ $<
+quiet_cmd_host-cobjs	= HOSTCC  $@
+      cmd_host-cobjs	= $(HOSTCC) $(hostc_flags) -c -o $@ $<
 $(host-cobjs): $(obj)/%.o: $(src)/%.c
 	@$(call print, cmd_host-cobjs)
 	@$(cmd_host-cobjs)
 -include $(host-cobjs:%=%.d)
+
+# Link an executable based on list of .o files, a mixture of .c and .cc
+# host-cxxmulti -> executable
+quiet_cmd_host-cxxmulti	= HOSTLD  $@
+      cmd_host-cxxmulti	= $(HOSTCXX) $(HOSTLDFLAGS) -o $@ \
+			  $(foreach o,objs cxxobjs,\
+			  $(addprefix $(obj)/,$($(@F)-$(o)))) \
+			  $(HOST_LOADLIBES) $(HOSTLOADLIBES_$(@F))
+$(host-cxxmulti):
+	@$(call print, cmd_host-cxxmulti)
+	@$(cmd_host-cxxmulti)
+$(call multi_depend, $(host-cxxmulti), , -objs -cxxobjs)
+
+# Create .o file from a single .cc (C++) file
+quiet_cmd_host-cxxobjs	= HOSTCXX $@
+      cmd_host-cxxobjs	= $(HOSTCXX) $(hostcxx_flags) -c -o $@ $<
+$(host-cxxobjs): $(obj)/%.o: $(src)/%.cc
+	@$(call print, cmd_host-cxxobjs)
+	@$(cmd_host-cxxobjs)
+-include $(host-cxxobjs:%=%.d)
+
