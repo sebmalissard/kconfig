@@ -1,0 +1,160 @@
+#
+# Additional makefile for the standalone kconfig
+#
+# Copyright (C) 2018 Sebastien Malissard <sebastien.malissard@dbmail.com>
+#
+
+# Dependencies files management
+depfile=$@.d,-MT,$@
+
+# Print build information according to the selected level.
+# Usage:
+#   $(call print, cmd)
+define print
+	$(if $(filter silent_,$(quiet)),, echo $($(quiet)$(strip $(1))))
+endef
+
+#############################################################################
+# Get from linux/Makefile
+#############################################################################
+
+# Beautify output
+# ---------------------------------------------------------------------------
+#
+# Normally, we echo the whole command before executing it. By making
+# that echo $($(quiet)$(cmd)), we now have the possibility to set
+# $(quiet) to choose other forms of output instead, e.g.
+#
+#         quiet_cmd_cc_o_c = Compiling $(RELDIR)/$@
+#         cmd_cc_o_c       = $(CC) $(c_flags) -c -o $@ $<
+#
+# If $(quiet) is empty, the whole command will be printed.
+# If it is set to "quiet_", only the short version will be printed.
+# If it is set to "silent_", nothing will be printed at all, see
+# print definition
+#
+# To put more focus on warnings, be less verbose as default
+# Use 'make V=1' to see the full commands
+
+ifeq ("$(origin V)", "command line")
+  KBUILD_VERBOSE = $(V)
+endif
+ifndef KBUILD_VERBOSE
+  KBUILD_VERBOSE = 0
+endif
+
+ifeq ($(KBUILD_VERBOSE),1)
+  quiet =
+else
+  quiet=quiet_
+endif
+
+# If the user is running make -s (silent mode), suppress echoing of
+# commands
+
+ifneq ($(findstring s,$(filter-out --%,$(MAKEFLAGS))),)
+  quiet=silent_
+endif
+
+# SHELL used by kbuild
+CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
+	  else if [ -x /bin/bash ]; then echo /bin/bash; \
+	  else echo sh; fi ; fi)
+
+HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS)
+HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS)
+
+HOSTCC       = gcc
+HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 \
+		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS)
+HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS)
+
+LEX		= flex
+YACC	= bison
+
+#############################################################################
+# Get from linux/script/Kbuild.include
+#############################################################################
+
+###
+# filename of target with directory and extension stripped
+basetarget = $(basename $(notdir $@))
+
+#############################################################################
+# Get from linux/script/Makefile.lib
+#############################################################################
+
+# Useful for describing the dependency of composite objects
+# Usage:
+#   $(call multi_depend, multi_used_targets, suffix_to_remove, suffix_to_add)
+define multi_depend
+$(foreach m, $(notdir $1), \
+	$(eval $(obj)/$m: \
+	$(addprefix $(obj)/, $(foreach s, $3, $($(m:%$(strip $2)=%$(s)))))))
+endef
+
+# LEX
+# ---------------------------------------------------------------------------
+quiet_cmd_flex = LEX     $@
+      cmd_flex = $(LEX) -o$@ -L $<
+
+$(obj)/%.lex.c: $(src)/%.l
+	@$(call print, cmd_flex)
+	@$(cmd_flex)
+
+# YACC
+# ---------------------------------------------------------------------------
+quiet_cmd_bison = YACC    $@
+      cmd_bison = $(YACC) -o$@ -t -l $<
+
+$(obj)/%.tab.c: $(src)/%.y
+	@$(call print, cmd_bison)
+	@$(cmd_bison)
+
+#############################################################################
+# Get from linux/script/Makefile.host
+#############################################################################
+
+__hostprogs := $(sort $(hostprogs-y) $(hostprogs-m))
+
+# C executables linked based on several .o files
+host-cmulti	:= $(foreach m,$(__hostprogs),\
+		   $(if $($(m)-cxxobjs),,$(if $($(m)-objs),$(m))))
+
+# Object (.o) files compiled from .c files
+host-cobjs	:= $(sort $(foreach m,$(__hostprogs),$($(m)-objs)))
+
+host-cmulti	:= $(addprefix $(obj)/,$(host-cmulti))
+host-cobjs	:= $(addprefix $(obj)/,$(host-cobjs))
+
+#####
+# Handle options to gcc. Support building with separate output directory
+_hostc_flags   = $(HOSTCFLAGS)   $(HOST_EXTRACFLAGS)   \
+                 $(HOSTCFLAGS_$(basetarget).o)
+
+__hostc_flags	= $(_hostc_flags)
+
+hostc_flags    = -Wp,-MD,$(depfile) $(__hostc_flags)
+
+#####
+# Compile programs on the host
+
+# Link an executable based on list of .o files, all plain c
+# host-cmulti -> executable
+quiet_cmd_host-cmulti	= HOSTLD  $@
+      cmd_host-cmulti	= $(HOSTCC) $(HOSTLDFLAGS) -o $@ \
+			  $(addprefix $(obj)/,$($(@F)-objs)) \
+			  $(HOST_LOADLIBES) $(HOSTLOADLIBES_$(@F))
+$(host-cmulti):
+	@$(call print, cmd_host-cmulti)
+	@$(cmd_host-cmulti)
+$(call multi_depend, $(host-cmulti), , -objs)
+
+# Create .o file from a single .c file
+# host-cobjs -> .o
+quiet_cmd_host-cobjs    = HOSTCC  $@
+      cmd_host-cobjs    = $(HOSTCC) $(hostc_flags) -c -o $@ $<
+$(host-cobjs): $(obj)/%.o: $(src)/%.c
+	@$(call print, cmd_host-cobjs)
+	@$(cmd_host-cobjs)
+-include $(host-cobjs:%=%.d)

@@ -1,0 +1,24 @@
+
+===============================STANDALONE KCONFIG===============================
+
+This package contains the kconfig tool extracted from the Linux kernel source 
+tree. Only a few minor changes are done to be able to build the kconfig tool in
+standalone mode without needed of the Linux kernel buildsystem.
+
+
+=== Integration in your project ===
+
+First, clone the kconfig tool in your project:
+    git clone https://github.com/sebmalissard/kconfig.git
+
+Second, define the following variables and include in the main Makefile of your
+project:
+    srctree := .
+    obj=$(srctree)/kconfig
+    include kconfig/Makefile
+
+
+=== Usage ===
+
+The use is the same that the Linux kernel, to get more information read the
+files in the Documentation directory.

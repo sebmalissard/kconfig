@@ -2,7 +2,8 @@
 # ===========================================================================
 # Kernel configuration targets
 # These targets are used from top-level makefile
-
+srctree=.
+src=kconfig
 PHONY += xconfig gconfig menuconfig config syncconfig update-po-config \
 	localmodconfig localyesconfig
 
@@ -214,7 +215,7 @@ clean-files     += config.pot linux.pot
 
 # Check that we have the required ncurses stuff installed for lxdialog (menuconfig)
 PHONY += $(obj)/dochecklxdialog
-$(addprefix $(obj)/, mconf.o $(lxdialog)): $(obj)/dochecklxdialog
+$(addprefix $(obj)/, mconf.o $(lxdialog)): | $(obj)/dochecklxdialog
 $(obj)/dochecklxdialog:
 	$(Q)$(CONFIG_SHELL) $(check-lxdialog) -check $(HOSTCC) $(HOST_EXTRACFLAGS) $(HOSTLOADLIBES_mconf)
 
@@ -310,3 +311,5 @@ $(obj)/%.moc: $(src)/%.h $(obj)/.tmp_qtcheck
 $(obj)/gconf.glade.h: $(obj)/gconf.glade
 	$(Q)intltool-extract --type=gettext/glade --srcdir=$(srctree) \
 	$(obj)/gconf.glade
+
+include kconfig/Makefile.standalone

@@ -1,0 +1,7 @@
+Authors of kconfig standalone package.
+
+The kconfig tool is extracted from to Linux kernel source tree, for a complete
+list of authors please refer to it.
+
+Authors list of the kconfig standalone package:
+    "Sebastien MALISSARD" <sebastien.malissard@dbmail.com>
