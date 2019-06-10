@@ -13,9 +13,17 @@ First, clone the kconfig tool in your project:
 
 Second, define the following variables and include in the main Makefile of your
 project:
-    srctree := .
-    obj=$(srctree)/kconfig
-    include kconfig/Makefile
+    KBUILD_KCONFIG = Config.in
+
+    srctree=$(ROOT_DIR)
+    src=tools/kconfig
+    obj=tools/kconfig
+
+    config:
+        $(Q) $(MAKE) -f $(src)/Makefile $@
+
+    %config:
+        $(Q) $(MAKE) -f $(src)/Makefile $@
 
 
 === Usage ===

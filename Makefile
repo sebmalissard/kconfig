@@ -2,8 +2,6 @@
 # ===========================================================================
 # Kernel configuration targets
 # These targets are used from top-level makefile
-srctree=.
-src=kconfig
 PHONY += xconfig gconfig menuconfig config syncconfig update-po-config \
 	localmodconfig localyesconfig
 
@@ -312,4 +310,4 @@ $(obj)/gconf.glade.h: $(obj)/gconf.glade
 	$(Q)intltool-extract --type=gettext/glade --srcdir=$(srctree) \
 	$(obj)/gconf.glade
 
-include kconfig/Makefile.standalone
+include $(srctree)/$(src)/Makefile.standalone
